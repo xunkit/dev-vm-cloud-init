@@ -1,0 +1,114 @@
+---
+- name: Configure dev VM
+  hosts: localhost
+  connection: local
+  become: true
+
+  vars:
+    dev_user: ubuntu
+    # Many third-party repos haven't published for 26.04 (resolute) yet,
+    # so we fall back to 24.04 (noble) for now.
+    apt_release: >-
+      {{ 'noble' if ansible_distribution_release == 'resolute'
+         else ansible_distribution_release }}
+    apt_arch: "{{ ansible_architecture | regex_replace('x86_64', 'amd64') }}"
+
+  tasks:
+    # ── APT repositories ──────────────────────────────────────────────
+
+    - name: Ensure apt keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Docker GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Add Docker repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ apt_arch }} signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/ubuntu {{ apt_release }} stable
+        filename: docker
+
+    - name: Add Kubernetes GPG key
+      ansible.builtin.get_url:
+        url: https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key
+        dest: /etc/apt/keyrings/kubernetes.asc
+        mode: "0644"
+
+    - name: Add Kubernetes repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [signed-by=/etc/apt/keyrings/kubernetes.asc]
+          https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /
+        filename: kubernetes
+
+    - name: Add HashiCorp GPG key
+      ansible.builtin.get_url:
+        url: https://apt.releases.hashicorp.com/gpg
+        dest: /etc/apt/keyrings/hashicorp.asc
+        mode: "0644"
+
+    - name: Add HashiCorp repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [signed-by=/etc/apt/keyrings/hashicorp.asc]
+          https://apt.releases.hashicorp.com {{ apt_release }} main
+        filename: hashicorp
+
+    # ── Install packages (single apt run) ─────────────────────────────
+
+    - name: Install all apt packages
+      ansible.builtin.apt:
+        name:
+          # Docker
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+          # Kubernetes
+          - kubectl
+          # Terraform
+          - terraform
+          # Shell essentials
+          - curl
+          - wget
+          - git
+          - jq
+          - unzip
+          - tree
+          - htop
+          - tmux
+          # Better CLI defaults
+          - bat
+          - ripgrep
+          - fd-find
+        state: present
+        update_cache: true
+
+    # ── Non-apt tools ─────────────────────────────────────────────────
+
+    - name: Install Helm
+      ansible.builtin.shell:
+        cmd: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        creates: /usr/local/bin/helm
+
+    - name: Install yq
+      ansible.builtin.get_url:
+        url: "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_{{ apt_arch }}"
+        dest: /usr/local/bin/yq
+        mode: "0755"
+
+    # ── User config ───────────────────────────────────────────────────
+
+    - name: Add dev user to docker group
+      ansible.builtin.user:
+        name: "{{ dev_user }}"
+        groups: docker
+        append: true
