@@ -85,10 +85,15 @@
           - tree
           - htop
           - tmux
+          - make
           # Better CLI defaults
           - bat
           - ripgrep
           - fd-find
+          - fzf
+          # Network debugging
+          - nmap
+          - traceroute
         state: present
         update_cache: true
 
@@ -104,6 +109,15 @@
         url: "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_{{ apt_arch }}"
         dest: /usr/local/bin/yq
         mode: "0755"
+
+    - name: Install k9s
+      ansible.builtin.unarchive:
+        src: "https://github.com/derailed/k9s/releases/latest/download/k9s_Linux_{{ apt_arch }}.tar.gz"
+        dest: /usr/local/bin
+        remote_src: true
+        include: [k9s]
+        mode: "0755"
+        creates: /usr/local/bin/k9s
 
     # ── User config ───────────────────────────────────────────────────
 
